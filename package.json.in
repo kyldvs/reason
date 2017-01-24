@@ -54,13 +54,12 @@
         "dependency-env": "*",
         "substs": "https://github.com/yunxing/substs.git",
         "opam-installer-bin": "https://github.com/yunxing/opam-installer-bin.git",
-        "nopam": "*",
-        "utop-bin": "https://github.com/reasonml/utop-bin"
+        "nopam": "*"
 
     },
     "scripts": {
         "editor": "eval $(dependencyEnv) && eval $EDITOR",
-        "postinstall": "eval $(dependencyEnv) && nopam && substs pkg/META.in && make compile_error && ocaml pkg/build.ml native=true native-dynlink=true utop=${utop_installed:-false} && (opam-installer --prefix=$opam_prefix || true)",
+        "postinstall": "eval $(dependencyEnv) && nopam && substs pkg/META.in && make compile_error && ocaml pkg/build.ml native=true native-dynlink=true && (opam-installer --prefix=$opam_prefix || true)",
         "clean": "eval $(dependencyEnv) && nopam && make clean",
         "env": "eval $(dependencyEnv) && env",
         "formatTest": "eval $(dependencyEnv) && cd formatTest; ./test.sh",
