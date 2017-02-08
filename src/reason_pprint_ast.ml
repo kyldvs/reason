@@ -570,6 +570,8 @@ let numeric_chars  = [ '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7'; '8'; '9' ]
 let special_infix_strings =
   ["asr"; "land"; "lor"; "lsl"; "lsr"; "lxor"; "mod"; "or"; ":="; "!="; "!=="]
 
+let alwaysBreakBefore = ["|>"]
+
 let updateToken = "="
 let requireIndentFor = [updateToken; ":="]
 
@@ -3420,9 +3422,20 @@ class printer  ()= object(self:'self)
           let infixToken = Token printedIdent in
           let rightItm = self#ensureContainingRule ~withPrecedence:infixToken ~reducesAfterRight:rightExpr in
           let leftItm = self#ensureExpression leftExpr ~reducesOnToken:infixToken in
-          let leftWithOp = makeList ~postSpace:true [leftItm; atom printedIdent] in
+          let alwaysBreak = (List.mem printedIdent alwaysBreakBefore) in
+          let leftWithOp = (
+            if alwaysBreak then
+              label ~space:true ~indent:0 ~break:`Always leftItm (atom printedIdent)
+            else
+              makeList ~postSpace:true [leftItm; atom printedIdent]
+          ) in
           let indent = infixTokenRequiresIndent printedIdent in
-          let expr = label ~space:true ?indent leftWithOp rightItm in
+          let expr = (
+            if alwaysBreak then
+              label ~space:true ~indent:0 ~break:`Never leftWithOp rightItm
+            else
+              label ~space:true ?indent leftWithOp rightItm
+          ) in
           SpecificInfixPrecedence ({reducePrecedence=infixToken; shiftPrecedence=infixToken}, expr)
         (* Will be rendered as `(+) a b c` which is parsed with higher precedence than all
            the other forms unparsed here.*)
