@@ -1,7 +1,7 @@
 module Reason_interface_printer : Printer_maker.PRINTER =
     struct
         type t = Parsetree.signature
-        exception Invalid_config = Printer_maker.Invalid_config
+        exception Invalid_config of string
 
         (* Note: filename should only be used with .mli files. See reason_toolchain. *)
         let defaultInterfaceParserFor use_stdin filename =
@@ -16,17 +16,18 @@ module Reason_interface_printer : Printer_maker.PRINTER =
         let parse filetype use_stdin filename =
             let ((ast, comments), parsedAsML, parsedAsInterface) =
             (match filetype with
-            | `Auto -> defaultInterfaceParserFor use_stdin filename
-            | `BinaryReason -> Printer_maker.reasonBinaryParser use_stdin filename
-            | `Binary -> Printer_maker.ocamlBinaryParser use_stdin filename true
-            | `ML ->
+            | None -> defaultInterfaceParserFor use_stdin filename
+            | Some "binary_reason" -> Printer_maker.reasonBinaryParser use_stdin filename
+            | Some "binary" -> Printer_maker.ocamlBinaryParser use_stdin filename true
+            | Some "ml" ->
                     let lexbuf = Reason_toolchain.setup_lexbuf use_stdin filename in
                     let intf = Reason_toolchain.ML.canonical_interface_with_comments in
                     ((intf lexbuf), true, true)
-            | `Reason ->
+            | Some "re" ->
                     let lexbuf = Reason_toolchain.setup_lexbuf use_stdin filename in
                     let intf = Reason_toolchain.JS.canonical_interface_with_comments in
-                    ((intf lexbuf), false, true))
+                    ((intf lexbuf), false, true)
+            | Some s -> raise (Invalid_config ("Invalid --parse setting for interface '" ^ s ^ "'.")))
             in
             if not parsedAsInterface then
                 raise (Invalid_config ("The file parsed does not appear to be an interface file."))
@@ -34,7 +35,7 @@ module Reason_interface_printer : Printer_maker.PRINTER =
 
         let makePrinter printtype filename parsedAsML output_chan output_formatter =
             match printtype with
-                    | `BinaryReason -> fun (ast, comments) -> (
+                    | Some "binary_reason" -> fun (ast, comments) -> (
                       (* Our special format for interchange between reason should keep the
                        * comments separate.  This is not compatible for input into the
                        * ocaml compiler - only for input into another version of Reason. We
@@ -45,17 +46,21 @@ module Reason_interface_printer : Printer_maker.PRINTER =
                         Config.ast_intf_magic_number, filename, ast, comments, parsedAsML, true
                       );
                     )
-                    | `Binary -> fun (ast, comments) -> (
+                    | Some "binary"
+                    | None -> fun (ast, comments) -> (
                       output_string output_chan Config.ast_intf_magic_number;
                       output_value  output_chan filename;
                       output_value  output_chan ast
                     )
-                    | `AST -> fun (ast, comments) -> (
+                    | Some "ast" -> fun (ast, comments) -> (
                       Printast.interface output_formatter ast
                     )
                     (* If you don't wrap the function in parens, it's a totally different
                      * meaning #thanksOCaml *)
-                    | `None -> (fun (ast, comments) -> ())
-                    | `ML -> Reason_toolchain.ML.print_canonical_interface_with_comments output_formatter
-                    | `Reason -> Reason_toolchain.JS.print_canonical_interface_with_comments output_formatter
+                    | Some "none" -> (fun (ast, comments) -> ())
+                    | Some "ml" -> Reason_toolchain.ML.print_canonical_interface_with_comments output_formatter
+                    | Some "re" -> Reason_toolchain.JS.print_canonical_interface_with_comments output_formatter
+                    | Some s -> (
+                      raise (Invalid_config ("Invalid --print setting for interface '" ^ s ^ "'."))
+                    )
     end;;

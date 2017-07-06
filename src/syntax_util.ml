@@ -292,31 +292,3 @@ let () =
      | _ ->
         None
      )
-
-
-type menhirMessagesError = {
-  msg: string;
-  loc: Location.t;
-}
-
-type menhirError =
-  | NoMenhirMessagesError
-  | MenhirMessagesError of menhirMessagesError
-
-let menhirMessagesError = ref [NoMenhirMessagesError]
-
-let findMenhirErrorMessage loc =
-    let rec find messages =
-      match messages with
-      | MenhirMessagesError err :: tail when err.loc = loc -> MenhirMessagesError err
-      | _ :: tail -> find tail
-      | [] -> NoMenhirMessagesError
-    in find !menhirMessagesError
-
-let add_error_message err =
-  let msg = if err.msg = "<SYNTAX ERROR>\n" then
-    [MenhirMessagesError {err with msg = "A syntax error occurred. Help to improve this message: https://github.com/facebook/reason/wiki/Add-a-Menhir-error-message"}]
-  else
-    [MenhirMessagesError err]
-  in
-  menhirMessagesError := !menhirMessagesError @ msg;

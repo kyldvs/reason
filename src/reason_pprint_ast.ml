@@ -570,6 +570,8 @@ let numeric_chars  = [ '0'; '1'; '2'; '3'; '4'; '5'; '6'; '7'; '8'; '9' ]
 let special_infix_strings =
   ["asr"; "land"; "lor"; "lsl"; "lsr"; "lxor"; "mod"; "or"; ":="; "!="; "!=="]
 
+let alwaysBreakBefore = ["|>"]
+
 let updateToken = "="
 let requireIndentFor = [updateToken; ":="]
 
@@ -3420,9 +3422,20 @@ class printer  ()= object(self:'self)
           let infixToken = Token printedIdent in
           let rightItm = self#ensureContainingRule ~withPrecedence:infixToken ~reducesAfterRight:rightExpr in
           let leftItm = self#ensureExpression leftExpr ~reducesOnToken:infixToken in
-          let leftWithOp = makeList ~postSpace:true [leftItm; atom printedIdent] in
+          let alwaysBreak = (List.mem printedIdent alwaysBreakBefore) in
+          let leftWithOp = (
+            if alwaysBreak then
+              label ~space:true ~indent:0 ~break:`Always leftItm (atom printedIdent)
+            else
+              makeList ~postSpace:true [leftItm; atom printedIdent]
+          ) in
           let indent = infixTokenRequiresIndent printedIdent in
-          let expr = label ~space:true ?indent leftWithOp rightItm in
+          let expr = (
+            if alwaysBreak then
+              label ~space:true ~indent:0 ~break:`Never leftWithOp rightItm
+            else
+              label ~space:true ?indent leftWithOp rightItm
+          ) in
           SpecificInfixPrecedence ({reducePrecedence=infixToken; shiftPrecedence=infixToken}, expr)
         (* Will be rendered as `(+) a b c` which is parsed with higher precedence than all
            the other forms unparsed here.*)
@@ -4919,7 +4932,8 @@ class printer  ()= object(self:'self)
     let sep = ";" in
     match e with
       | PStr [] -> atom ("[" ^ ppxToken  ^ ppxId.txt  ^ "]")
-      | PStr [itm] -> makeList ~break ~wrap ~pad [self#structure_item itm]
+      | PStr [itm] ->
+        makeList ~wrap ~pad [self#structure_item itm]
       | PStr (_::_ as items) ->
         let rows = (List.map (self#structure_item) items) in
         makeList ~wrap ~break ~pad ~postSpace ~sep rows
@@ -5097,10 +5111,8 @@ class printer  ()= object(self:'self)
       if (List.length attrs) == 0 then
         string_literals
       else
-        makeSpacedBreakableInlineList [
-          string_literals;
-          makeSpacedBreakableInlineList attrs
-        ]
+        makeList ~inline:(true, true) ~postSpace:true
+          [string_literals; makeList ~postSpace:true attrs]
     in
     label ~space:true frstHalf sndHalf
 
@@ -5486,8 +5498,14 @@ class printer  ()= object(self:'self)
       )
 
   method value_description x =
-    let vd = self#core_type x.pval_type in
-    self#attach_std_item_attrs x.pval_attributes vd
+    if x.pval_prim<>[] then
+      makeList ~postSpace:true [
+        self#core_type x.pval_type;
+        atom "=";
+        makeSpacedBreakableInlineList (List.map self#constant_string x.pval_prim)
+      ]
+    else
+      self#core_type x.pval_type;
 
   method signature_item x :layoutNode =
     let item: layoutNode =
@@ -5495,13 +5513,11 @@ class printer  ()= object(self:'self)
         | Psig_type l ->
             self#type_def_list l
         | Psig_value vd ->
-            if vd.pval_prim <> [] then
-              self#primitive_declaration vd
-            else
-              let intro = atom "let" in
-              (formatTypeConstraint
-                 (label ~space:true intro (wrapLayoutWithLoc (Some (vd.pval_name.loc)) (protectIdentifier vd.pval_name.txt)))
-                 (self#value_description vd))
+            let intro = if vd.pval_prim = [] then atom "let" else atom "external" in
+            (formatTypeConstraint
+               (label ~space:true intro (wrapLayoutWithLoc (Some (vd.pval_name.loc)) (protectIdentifier vd.pval_name.txt)))
+               (self#value_description vd)
+            )
 
         | Psig_typext te ->
             self#type_extension te
